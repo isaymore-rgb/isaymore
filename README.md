@@ -1,33 +1,51 @@
-# RC-FINDER 手機 GPS 定位網頁（V4.0）
+# RC-FINDER V4.0 手機 GPS — 離線 PWA
 
-[開啟 HTTPS GPS 網頁](https://isaymore-rgb.github.io/isaymore/)
+線上網站：https://isaymore-rgb.github.io/isaymore/
 
-Android Chrome 和 iPhone Safari 均可在使用者同意後由 GitHub Pages HTTPS 網頁取得手機 GPS 座標、精度與時間。
+已升級為 **離線可啟動的 PWA**，保留：
+- HTTPS 定位 / GPS 精度與時間顯示
+- GPS 持續定位及單次定位（需使用者授權；背景、鎖屏不保證執行）
+- 「重新定位並傳送到 RC-FINDER」整頁跳轉至 `http://192.168.4.1/gps/update`
+- 複製座標及 Google Maps 開啟功能（地圖需要手機上網）
+- 三塊 ESP32-C3 維持**完全不使用網際網路**
 
-## V4.0：一鍵傳給完全離線的 RC-FINDER 地面站
+## 首次安裝：必須在線上
 
-1. 手機用行動數據載入本網站，允許 GPS 定位。
-2. 接入地面站的 Wi-Fi `RC-FINDER`；地面站本身不需要上網。
-3. 在地面站 `http://192.168.4.1` 按 START，確認飛機直達訊號。
-4. 切回本 HTTPS 網頁，按「**重新定位並傳送到 RC-FINDER**」。
-5. 網頁會重新取得一次 GPS，並嘗試整頁導覽到 `http://192.168.4.1/gps/update?lat=...&lon=...&acc=...&src=github`。
-6. 地面站收到座標後會顯示確認頁，按「返回 RC-FINDER 尋機網頁」。
+**Android Chrome**
+1. 手機先不要連 RC-FINDER 無網際網路的 Wi-Fi，以 4G／5G 開啟網站。
+2. 等待頁面顯示「✓ 離線網頁已快取完成」。
+3. 按「安裝到手機主畫面」。若未跳出系統安裝視窗，使用 Chrome 選單的「安裝應用程式／加入主畫面」。
+4. 從主畫面點開 RC-FINDER GPS，確認可取得手機 GPS（需允許定位）。
 
-**重要**：必須燒錄 V4.0 地面站程式，舊版路由不會回傳此確認頁。手機必須同時能透過行動數據開啟 HTTPS 網頁並透過 RC-FINDER Wi-Fi 連接本地 HTTP IP。Android/iPhone 實際分流可能因裝置設定而異，請分別實測。
+**iPhone Safari**
+1. 使用 Safari、4G／5G 開啟網站，等待「✓ 離線網頁已快取完成」。
+2. 點 Safari 的「分享」→「加入主畫面」（若有「作為網頁 App 開啟」請啟用）。
+3. 從主畫面打開圖示，允許 GPS 定位。
 
-## 技術說明
+## 真正離線使用與現場驗收
 
-- 使用頂層瀏覽器導覽，不是跨網域 `fetch`；不需要 CORS、MQTT、HTTPS ESP32 伺服器或 Chrome flags。
-- 純網頁按鈕每次只傳送一筆 GPS，**不提供背景自動上傳**。
-- 地面站只將當時新鮮的「飛機→地面」RSSI 與 GPS 配對，精度太差的 GPS 不進入最強位置紀錄。
-- 若手機顯示 GPS 精度大於 ±50m，地面站會收取座標，但不會把它用於最強 RSSI 定位紀錄。
-- 公網 GitHub Pages 不能直接讀取三端 ESP32 資料；地面站需要有可用的本地 Wi-Fi 連線。
-- 此網址使用 HTTP GET 帶入 GPS，瀏覽器歷史紀錄可能保留座標；不要分享含座標的完整 URL。
-- Wi-Fi RC-FINDER 是開放 AP，沒有 GPS 上傳 PIN；任何能連入 AP 的設備都可能提交座標。此方案不提供發送者真實身分驗證。
-- 網頁可以一鍵用 Google Maps 開啟手機自身位置；地面站另有最強 GPS 配對點的 Google Maps 按鈕。
+1. 首先完成一次 **在線上安裝與離線快取**，不能只在 Wi-Fi 登入視窗看過網頁。
+2. 手機改連 `RC-FINDER` Wi-Fi，確認 `http://192.168.4.1` 可連上地面站。
+3. 即使 GitHub 網站連不上，仍應可由 **手機主畫面圖示**啟動已安裝的 PWA。
+4. 點「取得一次目前位置」，等待衛星定位。定位本身不依賴 GitHub；手機系統仍可能使用輔助網路定位。
+5. 點「重新定位並傳送到 RC-FINDER」，PWA 使用 HTTP 頂層頁面跳轉將 `lat`、`lon`、`acc`、`fix_age_ms` 傳到地面站。
+6. 在地面站 GPS 確認頁確認資料，再回尋機頁檢查「最強有定位直達 RSSI」。若精度超過 ±50m，地面站可能接受座標但不配對最強 RSSI。
 
-## GitHub Pages 發布
+## 限制與注意事項
+- PWA 解決 **離線載入定位頁**，但不能強制 Android / iOS 在所有機型都回傳 GPS，也不能保證背景持續定位。
+- 網站必須在「有網路」時完成一次 Service Worker 安裝；各平台首次離線可用性應以實測為準。
+- PWA 不會讓三塊 ESP32 自行上網；手機須連 RC-FINDER Wi-Fi 才可開啟 `192.168.4.1`。
+- 不必同時依賴 5G 和 Wi-Fi；GitHub 頁面已安裝快取後，可離線運作。
+- GitHub Pages PWA 不使用 MQTT、CORS 轉發或 Chrome Flags，也不會在雲端儲存個人 GPS。
+- GPS 傳送 URL 含經緯度，可能留在瀏覽器歷史紀錄；請勿分享該 URL。
+- 開放 AP 且不使用 PIN，GPS HTTP 端點沒有發送者身分驗證，附近連接者可能提交假座標。
+- Google Maps 必須可用網際網路方能載入圖資。
+- 如果需要讓手機自動且持續回傳 GPS，需要原生 App；此版仍採「按一次才傳一次」。
 
-前往 Repository Settings → Pages → Deploy from branch → `main` → `/(root)`。
+## 開發檔案
+- `index.html`：HTTPS GPS 網頁、PWA 安裝介面、HTTP 頂層跳轉
+- `manifest.webmanifest`：安裝資訊、圖示與範圍
+- `sw.js`：離線 App Shell 的版本化快取
+- `icons/icon-192.png` 及 `icons/icon-512.png`：PWA 圖示
 
-此專案網頁位置：https://isaymore-rgb.github.io/isaymore/
+更新快取：下次有網路時開啟網站，瀏覽器檢查新的 Service Worker 版本；新版本可用後重新載入。請勿在離線時直接清除網站資料，否則會失去快取。
