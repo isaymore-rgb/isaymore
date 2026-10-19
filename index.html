@@ -14,9 +14,16 @@
 <div class="grid"><div class="cell"><div class="lab">緯度 Latitude</div><div class="val" id="lat">--</div></div><div class="cell"><div class="lab">經度 Longitude</div><div class="val" id="lon">--</div></div><div class="cell"><div class="lab">GPS 精度</div><div class="val" id="accuracy">--</div></div><div class="cell"><div class="lab">定位時間</div><div class="val" id="time">--</div></div></div>
 <button id="start">啟動 GPS 持續定位</button><button id="once" class="secondary">取得一次目前位置</button><button id="stop" class="secondary" disabled>停止持續定位</button>
 <a id="maps" class="btn disabled" target="_blank" rel="noopener noreferrer">用 Google Maps 開啟位置</a><button id="copy" class="secondary" disabled>複製經緯度</button>
+<div style="border-top:1px solid #dce7f1;padding-top:12px;margin-top:15px">
+<strong>📡 傳送 GPS 至離線 RC-FINDER 地面站</strong>
+<p class="sub">手機需要連接 RC-FINDER Wi-Fi，並能用 4G／5G 載入本 HTTPS 頁面。按按鈕後會重新取得一次 GPS，然後跳轉到 http://192.168.4.1/gps/update；不是 MQTT，也不要求 ESP32 上網。</p>
+<button id="sendGround" style="background:#087d53">📍 重新定位並傳送到 RC-FINDER</button>
+<p id="sendHint" class="sub" role="status">尚未傳送。點擊後會離開本頁，在地面站確認是否接收成功。</p>
+<a id="localFallback" class="btn secondary disabled" style="font-size:14px">手動開啟 GPS 傳送網址（備援）</a>
+</div>
 <p class="sub">必須先授權瀏覽器使用定位。按下「啟動 GPS」後，網頁在前景時可嘗試持續更新；鎖屏或切到背景可能暫停。</p></div>
-<div class="card"><b>RC-FINDER HTTP 地面站</b><p class="sub">本頁只在手機取得 GPS，不會自行把座標送到地面站。若地面站有網際網路，可另外整合 MQTT；沒有網際網路則需要手機端資料橋接方案。請勿把他人的 GPS 混入你的最強 RSSI 位置紀錄。</p></div>
-<footer>GPS 座標僅顯示在目前手機瀏覽器，不會由本頁主動上傳到伺服器。GitHub Pages 會提供 HTTPS，但定位權限仍由手機使用者決定。</footer>
+<div class="card"><b>RC-FINDER HTTP 地面站</b><p class="sub">新增一鍵跳轉功能：HTTPS 頁面取得 GPS 後，使用瀏覽器頂層導覽開啟本地 HTTP 接收網址。這不屬於跨來源 fetch，所以不必設定 CORS；手機實際能否連上 192.168.4.1，仍取決於 RC-FINDER Wi-Fi／行動數據路由及瀏覽器設定。</p></div>
+<footer>GPS 只有在你按「傳送到 RC-FINDER」時才透過 HTTP 網址送至地面站。網址查詢參數及瀏覽器歷史紀錄可能包含 GPS 座標。GitHub Pages 不需要 MQTT。</footer>
 </main><script>
 'use strict';
 let watcher=null,last=null;
@@ -36,4 +43,44 @@ el('start').onclick=()=>{if(!canLocate()||watcher!==null)return;watcher=navigato
 el('once').onclick=()=>{if(!canLocate())return;status('正在取得目前 GPS…');navigator.geolocation.getCurrentPosition(update,error,opts)};
 el('stop').onclick=()=>{if(watcher!==null){navigator.geolocation.clearWatch(watcher);watcher=null}el('start').disabled=false;el('stop').disabled=true;status('已停止持續定位')};
 el('copy').onclick=async()=>{if(!last)return;const s=last.lat.toFixed(7)+','+last.lon.toFixed(7);try{await navigator.clipboard.writeText(s);status('已複製座標','good')}catch{status('無法自動複製，請手動選取座標','bad')}};
+
+const GROUND_GPS_URL='http://192.168.4.1/gps/update';
+function buildGroundUrl(position){
+  const c=position.coords;
+  if(!Number.isFinite(c.latitude)||!Number.isFinite(c.longitude)
+     ||Math.abs(c.latitude)>90||Math.abs(c.longitude)>180
+     ||(c.latitude===0&&c.longitude===0))throw Error('取得不合法 GPS 座標');
+  const age=Math.max(0,Date.now()-position.timestamp);
+  if(age>10000)throw Error('GPS 已超過 10 秒，請重新定位');
+  const u=new URL(GROUND_GPS_URL);
+  u.searchParams.set('lat',c.latitude.toFixed(7));
+  u.searchParams.set('lon',c.longitude.toFixed(7));
+  if(Number.isFinite(c.accuracy)&&c.accuracy>=0)u.searchParams.set('acc',Math.min(c.accuracy,1000).toFixed(1));
+  u.searchParams.set('fix_age_ms',String(Math.round(age)));
+  u.searchParams.set('src','github');
+  return u.toString();
+}
+el('sendGround').onclick=()=>{
+  if(!canLocate())return;
+  const b=el('sendGround');b.disabled=true;
+  el('sendHint').textContent='重新取得 GPS 中；完成後將開啟地面站 HTTP 網頁…';
+  status('正在取得新鮮 GPS 並準備傳送…');
+  navigator.geolocation.getCurrentPosition(position=>{
+    update(position);
+    try{
+      const link=buildGroundUrl(position);
+      const backup=el('localFallback');backup.href=link;backup.classList.remove('disabled');
+      if(Number.isFinite(position.coords.accuracy)&&position.coords.accuracy>50){
+        el('sendHint').textContent='GPS 精度超過 ±50m；地面站會接收座標，但不會配對最強 RSSI。建議先到戶外改善定位。';
+      }else{
+        el('sendHint').textContent='準備跳轉到地面站…如跳轉失敗，可回本頁按備援連結。';
+      }
+      // Full-page navigation, NOT cross-origin fetch / XHR / iframe.
+      // CORS and mixed-content subresource checks do not apply to this case.
+      window.location.assign(link);
+    }catch(e){b.disabled=false;status(e.message,'bad');el('sendHint').textContent=e.message}
+  },e=>{b.disabled=false;error(e);el('sendHint').textContent='定位失敗，請重試並確認 GPS 權限。'},
+  {enableHighAccuracy:true,timeout:20000,maximumAge:0});
+};
+
 </script></body></html>
