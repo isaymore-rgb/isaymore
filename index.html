@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>RC-FINDER 手機 GPS 定位</title>
+<style>
+:root{color-scheme:light;font-family:system-ui,-apple-system,'Noto Sans TC',sans-serif;background:#eef3f9;color:#172d48}
+*{box-sizing:border-box}body{margin:0;padding:18px 14px 36px}main{max-width:560px;margin:auto}.head{background:#14365c;color:white;padding:24px 20px;border-radius:18px}.head h1{margin:0;font-size:26px}.head p{opacity:.9;margin:8px 0 0}.card{background:white;border-radius:16px;padding:18px;margin-top:14px;box-shadow:0 4px 18px #102b4910}.state{font-weight:700;font-size:16px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}.cell{background:#f2f6fb;border-radius:12px;padding:12px}.lab{font-size:13px;color:#55708b}.val{font-size:19px;font-weight:700;overflow-wrap:anywhere;margin-top:5px}.sub{color:#4b657c;font-size:14px;margin-top:12px;line-height:1.6}button,a.btn{border:0;display:block;width:100%;padding:15px 10px;border-radius:12px;margin-top:10px;text-align:center;font-size:17px;font-weight:700;cursor:pointer;text-decoration:none;background:#1769bd;color:white}button.secondary,a.secondary{background:#e5edf7;color:#1c436d}button:disabled,a.disabled{opacity:.48;pointer-events:none}.warn{color:#9f5405}.good{color:#117146}.bad{color:#bd3030}footer{margin-top:18px;color:#60768e;font-size:13px;line-height:1.6}
+</style>
+</head>
+<body><main>
+<div class="head"><h1>RC-FINDER 手機 GPS</h1><p>GitHub Pages HTTPS 定位頁 · Android / iPhone</p></div>
+<div class="card"><div id="status" class="state warn" role="status">等待啟動定位</div>
+<div class="grid"><div class="cell"><div class="lab">緯度 Latitude</div><div class="val" id="lat">--</div></div><div class="cell"><div class="lab">經度 Longitude</div><div class="val" id="lon">--</div></div><div class="cell"><div class="lab">GPS 精度</div><div class="val" id="accuracy">--</div></div><div class="cell"><div class="lab">定位時間</div><div class="val" id="time">--</div></div></div>
+<button id="start">啟動 GPS 持續定位</button><button id="once" class="secondary">取得一次目前位置</button><button id="stop" class="secondary" disabled>停止持續定位</button>
+<a id="maps" class="btn disabled" target="_blank" rel="noopener noreferrer">用 Google Maps 開啟位置</a><button id="copy" class="secondary" disabled>複製經緯度</button>
+<p class="sub">必須先授權瀏覽器使用定位。按下「啟動 GPS」後，網頁在前景時可嘗試持續更新；鎖屏或切到背景可能暫停。</p></div>
+<div class="card"><b>RC-FINDER HTTP 地面站</b><p class="sub">本頁只在手機取得 GPS，不會自行把座標送到地面站。若地面站有網際網路，可另外整合 MQTT；沒有網際網路則需要手機端資料橋接方案。請勿把他人的 GPS 混入你的最強 RSSI 位置紀錄。</p></div>
+<footer>GPS 座標僅顯示在目前手機瀏覽器，不會由本頁主動上傳到伺服器。GitHub Pages 會提供 HTTPS，但定位權限仍由手機使用者決定。</footer>
+</main><script>
+'use strict';
+let watcher=null,last=null;
+const el=id=>document.getElementById(id);
+function status(msg,kind='warn'){el('status').textContent=msg;el('status').className='state '+kind}
+function update(p){const c=p.coords; if(!Number.isFinite(c.latitude)||!Number.isFinite(c.longitude))return status('收到無效 GPS 座標','bad');
+ last={lat:c.latitude,lon:c.longitude,accuracy:c.accuracy,time:p.timestamp};
+ el('lat').textContent=c.latitude.toFixed(7);el('lon').textContent=c.longitude.toFixed(7);
+ el('accuracy').textContent=Number.isFinite(c.accuracy)?('±'+Math.round(c.accuracy)+' m'):'未知';
+ el('time').textContent=new Date(p.timestamp).toLocaleTimeString('zh-TW',{hour12:false});
+ el('maps').href='https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(c.latitude+','+c.longitude);
+ el('maps').classList.remove('disabled');el('copy').disabled=false;status('GPS 定位成功','good');}
+function error(e){const reason=({1:'定位權限遭拒絕',2:'位置資訊暫時不可用',3:'定位逾時'})[e.code]||'未知定位錯誤'; status(reason+'（'+e.message+'）','bad')}
+const opts={enableHighAccuracy:true,timeout:20000,maximumAge:0};
+function canLocate(){if(!window.isSecureContext){status('目前不是安全來源，請使用 HTTPS GitHub Pages 網址','bad');return false}if(!navigator.geolocation){status('瀏覽器不支援定位','bad');return false}return true}
+el('start').onclick=()=>{if(!canLocate()||watcher!==null)return;watcher=navigator.geolocation.watchPosition(update,error,opts);el('start').disabled=true;el('stop').disabled=false;status('持續定位啟動中…')};
+el('once').onclick=()=>{if(!canLocate())return;status('正在取得目前 GPS…');navigator.geolocation.getCurrentPosition(update,error,opts)};
+el('stop').onclick=()=>{if(watcher!==null){navigator.geolocation.clearWatch(watcher);watcher=null}el('start').disabled=false;el('stop').disabled=true;status('已停止持續定位')};
+el('copy').onclick=async()=>{if(!last)return;const s=last.lat.toFixed(7)+','+last.lon.toFixed(7);try{await navigator.clipboard.writeText(s);status('已複製座標','good')}catch{status('無法自動複製，請手動選取座標','bad')}};
+</script></body></html>
